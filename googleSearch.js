@@ -7,22 +7,29 @@ const processedUrlsFile = "processed_urls.txt";
 const outputCsvFile = "google_search_results.csv";
 
 /**
- * Build a refined query string.
+ * Normalize a URL by trimming whitespace and converting to lowercase.
  */
+function normalizeUrl(url) {
+  return url.trim().toLowerCase();
+}
+
+/**
+ * Build a refined query string.
+*/
 function buildQuery({ intitleKeywords, keywords, domains, locations, minDate, avoidKeywords }) {
-  const intitlePart = intitleKeywords && intitleKeywords.length > 0 
-    ? `intitle:(${intitleKeywords.map(k => `"${k}"`).join(" OR ")})` 
+  const intitlePart = (intitleKeywords && intitleKeywords.length > 0)
+    ? `intitle:(${intitleKeywords.map(k => `"${k}"`).join(" OR ")})`
     : "";
-  const keywordsPart = keywords && keywords.length > 0 
+  const keywordsPart = (keywords && keywords.length > 0)
     ? `(${keywords.map(k => `"${k}"`).join(" OR ")})`
     : "";
-  const domainsPart = domains && domains.length > 0 
+  const domainsPart = (domains && domains.length > 0)
     ? `(${domains.map(domain => `site:${domain}`).join(" OR ")})`
     : "";
-  const locationsPart = locations && locations.length > 0 
+  const locationsPart = (locations && locations.length > 0)
     ? `(${locations.map(loc => `"${loc}"`).join(" OR ")})`
     : "";
-  const excludePart = avoidKeywords && avoidKeywords.length > 0 
+  const excludePart = (avoidKeywords && avoidKeywords.length > 0)
     ? `-(${avoidKeywords.map(term => `"${term}"`).join(" OR ")})`
     : "";
   const datePart = minDate ? `after:${minDate}` : "";
@@ -33,7 +40,6 @@ function buildQuery({ intitleKeywords, keywords, domains, locations, minDate, av
 
 /**
  * Check if text contains any of the avoid keywords (case-insensitive).
- * This is an additional safeguard even though the query excludes unwanted keywords.
  */
 function containsAvoidKeyword(text, avoidKeywords) {
   return avoidKeywords.some(keyword =>
@@ -56,65 +62,19 @@ function getPublishedDate(item) {
 }
 
 /**
- * Fetch all results from the Google Custom Search API until the
- * desired maxResults is reached or no further pages are available.
- */
-async function fetchAllResults(query) {
-  const apiEndpoint = 'https://www.googleapis.com/customsearch/v1';
-  let startIndex = 1;
-  const allItems = [];
-  const maxResults = config.maxResults || Infinity;
-  
-  while (true) {
-    if (allItems.length >= maxResults) break;
-    
-    const url = `${apiEndpoint}?key=${config.apiKey}&cx=${config.cx}&q=${encodeURIComponent(query)}&start=${startIndex}`;
-    console.log(`Fetching results starting at index ${startIndex}...`);
-    
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      
-      if (!data.items || data.items.length === 0) break;
-      
-      allItems.push(...data.items);
-      
-      // If we've reached/exceeded maxResults, trim and break.
-      if (allItems.length >= maxResults) {
-        allItems.length = maxResults;
-        break;
-      }
-      
-      if (data.queries && data.queries.nextPage && data.queries.nextPage[0].startIndex) {
-        startIndex = data.queries.nextPage[0].startIndex;
-      } else {
-        break;
-      }
-      
-      // Google API typically limits start index (often 91 is the max)
-      if (startIndex > 91) break;
-      
-      // Delay to avoid rate limiting.
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (error) {
-      console.error(`Error fetching results at start index ${startIndex}:`, error);
-      break;
-    }
-  }
-  return allItems;
-}
-
-/**
  * Loads already processed URLs from file into a Set.
  */
 function loadProcessedUrls() {
   if (!fs.existsSync(processedUrlsFile)) return new Set();
   const data = fs.readFileSync(processedUrlsFile, 'utf8');
-  return new Set(data.split('\n').filter(url => url.trim().length > 0));
+  return new Set(data.split('\n')
+    .filter(url => url.trim().length > 0)
+    .map(url => normalizeUrl(url))
+  );
 }
 
 /**
- * Appends a set of URLs to the processed URLs file.
+ * Appends URLs to the processed URLs file.
  */
 function saveProcessedUrls(newUrls) {
   if (newUrls.length === 0) return;
@@ -123,7 +83,7 @@ function saveProcessedUrls(newUrls) {
 }
 
 /**
- * Appends new results to the CSV file.
+ * Appends results to the CSV file.
  * If the CSV does not exist, writes the header first.
  */
 function appendToCSV(results) {
@@ -143,45 +103,92 @@ function appendToCSV(results) {
   fs.appendFileSync(outputCsvFile, csvData, 'utf8');
 }
 
-// Main function: Build query, fetch results, filter them, then append to CSV.
+/**
+ * Fetch new (unique) results that pass filtering criteria.
+ *
+ * Continues paginating through Google Custom Search results until the number
+ * of new results (that are not already processed) reaches config.maxResults,
+ * or until no further pages are available.
+ */
+async function fetchNewResults(query, processedUrls) {
+  const apiEndpoint = 'https://www.googleapis.com/customsearch/v1';
+  let startIndex = 1;
+  let newResults = [];
+  const maxNewResults = config.maxResults;
+  const minDateObj = config.minDate ? new Date(config.minDate) : null;
+  
+  while (newResults.length < maxNewResults) {
+    const url = `${apiEndpoint}?key=${config.apiKey}&cx=${config.cx}&q=${encodeURIComponent(query)}&start=${startIndex}`;
+    console.log(`Fetching results starting at index ${startIndex}...`);
+    
+    let data;
+    try {
+      const res = await fetch(url);
+      data = await res.json();
+    } catch (error) {
+      console.error(`Error fetching results at start index ${startIndex}:`, error);
+      break;
+    }
+    
+    if (!data.items || data.items.length === 0) break;
+    
+    // Process the items on this page
+    for (const item of data.items) {
+      const title = item.title || "";
+      const urlItem = item.link || "";
+      const normalized = normalizeUrl(urlItem);
+      
+      // Check if already processed or already collected in this run
+      if (processedUrls.has(normalized)) continue;
+      if (newResults.some(result => normalizeUrl(result.URL) === normalized)) continue;
+      
+      // Check avoid keywords (using title)
+      if (containsAvoidKeyword(title, config.avoidKeywords)) continue;
+      
+      // Check minDate (if available)
+      if (minDateObj) {
+        const publishedDate = getPublishedDate(item);
+        if (publishedDate && publishedDate < minDateObj) continue;
+      }
+      
+      newResults.push({ Title: title, URL: urlItem });
+      
+      // Stop early if we've accumulated enough new results
+      if (newResults.length >= maxNewResults) break;
+    }
+    
+    // If we've reached enough new results, break out of the loop
+    if (newResults.length >= maxNewResults) break;
+    
+    // Move to the next page if available
+    if (data.queries && data.queries.nextPage && data.queries.nextPage[0].startIndex) {
+      startIndex = data.queries.nextPage[0].startIndex;
+    } else {
+      break;
+    }
+    // Google API limit - typically start index doesn't go beyond 91.
+    if (startIndex > 91) break;
+    
+    // Delay to avoid rate limiting.
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  return newResults;
+}
+
+// Main function: Build query, fetch new results, and append them.
 async function main() {
   const query = buildQuery(config);
   console.log("Google Search Query:", query);
 
-  const rawItems = await fetchAllResults(query);
-  console.log(`Fetched ${rawItems.length} raw results`);
-
-  // Convert minDate (if provided) to a Date object.
-  const minDateObj = config.minDate ? new Date(config.minDate) : null;
-
-  // Filter results: remove items with avoid keywords and those published before minDate.
-  const filteredResults = rawItems.reduce((acc, item) => {
-    const title = item.title || "";
-    const url = item.link || "";
-    
-    if (containsAvoidKeyword(title, config.avoidKeywords)) return acc;
-
-    if (minDateObj) {
-      const publishedDate = getPublishedDate(item);
-      if (publishedDate && publishedDate < minDateObj) return acc;
-    }
-    
-    acc.push({ Title: title, URL: url });
-    return acc;
-  }, []);
-
-  // Load URLs that have been processed in the past
   const processedUrls = loadProcessedUrls();
-
-  // Filter out results that have already been collected.
-  const newResults = filteredResults.filter(result => !processedUrls.has(result.URL));
+  const newResults = await fetchNewResults(query, processedUrls);
+  console.log(`Fetched ${newResults.length} new unique results`);
 
   if (newResults.length > 0) {
     console.log(`Appending ${newResults.length} new unique results to CSV...`);
     appendToCSV(newResults);
-    // Save the new URLs for future runs.
-    const newUrls = newResults.map(result => result.URL);
-    saveProcessedUrls(newUrls);
+    const newNormalizedUrls = newResults.map(result => normalizeUrl(result.URL));
+    saveProcessedUrls(newNormalizedUrls);
   } else {
     console.log("No new results found after filtering.");
   }
