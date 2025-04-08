@@ -2,21 +2,30 @@
 
 # Google Custom Job Searcher
 
-This Node.js application uses the [Google Custom Search API](https://developers.google.com/custom-search/v1/overview) to retrieve search results based on specified keywords, domains (including subdomains), locations, and date criteria. The results are filtered (by avoid keywords, minimum publication date, etc.), then output to the console and saved to a CSV file for review.
+This Node.js application uses the [Google Custom Search API](https://developers.google.com/custom-search/v1/overview) to retrieve search results based on specified criteria such as keywords, domains (including subdomains), locations, and publication date. The script filters out results containing undesirable phrases and continues paginating until it accumulates the number of unique *new* results defined by your configuration. These unique results are then appended to a CSV file, and their URLs are stored in a separate file so that duplicates are skipped in future searches.
 
-> **Note:** The API credentials and sensitive configuration details are stored in a `config.json` file. This file is excluded from version control via `.gitignore` to protect your credentials.
+> **Note:** The API credentials and sensitive configuration details are stored in a `config.json` file, which is excluded from version control via `.gitignore` to protect your credentials. Your search results, stored in the `google_search_results.csv` file, and your list of processed URLs, stored in the `processed_urls.txt` file, are also excluded from version control via `.gitignore` to protect the privacy of your searches.
 
 ## Features
 
-- **Advanced Query Building:** Combines multiple criteria including two sets of keywords:
-  - **intitleKeywords:** Keywords that must appear in the page title.
+- **Advanced Query Building:**  
+  Combines two sets of search terms:
+  - **intitleKeywords:** Keywords that must appear in the page title (using the `intitle:` operator).
   - **keywords:** General search terms that can appear anywhere in the page.
-- **Domain Filtering:** Uses the `site:` operator to restrict results to specified domains (including all subdomains).
-- **Location and Date Filtering:** Limits search results to pages matching provided location terms and (optionally) those published after a given date.
-- **Avoid Keywords:** Excludes results containing designated phrases (e.g., "government clearance").
-- **Pagination:** Fetches multiple pages of results up to a user-defined maximum.
-- **CSV Output:** Saves the title and URL of each result into a CSV file.
-- **User Configurable:** All search settings are managed through a single configuration file.
+- **Domain Filtering:**  
+  Uses the `site:` operator to restrict results to specified domains (and all of their subdomains).
+- **Location and Date Filtering:**  
+  Limits search results based on location criteria and (optionally) a minimum publication date.
+- **Avoid Keywords:**  
+  Excludes results containing designated phrases (e.g., "government clearance").
+- **Dynamic Pagination:**  
+  Continues fetching additional pages beyond duplicates until the number of **new unique results** reaches the configured `maxResults` value.
+- **Duplicate Tracking:**  
+  Stores processed URLs in a file (`processed_urls.txt`) to avoid reprocessing duplicates on subsequent searches.
+- **CSV Output:**  
+  Appends new unique results (Title and URL) to `google_search_results.csv` instead of overwriting them.
+- **User Configurable:**  
+  All search settings are managed through a single configuration file.
 
 ## Prerequisites
 
@@ -44,7 +53,7 @@ npm install node-fetch@2
 
 ### 3. Create the Configuration File
 
-Create a file named `config.json` in the root of your repository. This file should contain your search criteria and API credentials. A sample configuration file is provided in the repository as `sampleConfig.json`; you can rename it to `config.json` and update the values as needed.
+Create a file named `config.json` in the root of your repository. This file should contain your search criteria and API credentials. A sample configuration file is provided in the repository as `sampleConfig.json`; you should rename it to `config.json` and update the values as needed. A sample file for processed URLs is also provided in the repository as `sampleProcessedUrls.txt`; you should rename it to `processed_urls.txt`.
 
 Below is an example configuration:
 
@@ -97,9 +106,9 @@ node googleSearch.js
 The script will:
 
 - Build the search query based on your critera.
-- Call the Google Custom Search API and paginate through the results up to the limit defined in `"maxResults"`.
-- Filter the results based on avoid keywords and minimum publication date.
-- Output the title and URL of each result to the console and write them to `google_search_results.csv`.
+- Use the Google Custom Search API to fetch results, skipping duplicates, until `"maxResults"` new unique results are accumulated.
+- Append new unique results to the `google_search_results.csv` file.
+- Store the URLs of processed pages in `processed_urls.txt` so that subsequent runs do not process duplicates.
 
 ## Customization
 
