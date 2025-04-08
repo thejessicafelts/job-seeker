@@ -1,3 +1,5 @@
+**[View the Repository](https://www.github.com/thejessicafelts/job-seeker.git)**
+
 # Google Custom Job Searcher
 
 This Node.js application uses the [Google Custom Search API](https://developers.google.com/custom-search/v1/overview) to retrieve search results based on specified keywords, domains (including subdomains), locations, and date criteria. The results are filtered (by avoid keywords, minimum publication date, etc.), then output to the console and saved to a CSV file for review.
