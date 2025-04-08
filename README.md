@@ -8,12 +8,15 @@ This Node.js application uses the [Google Custom Search API](https://developers.
 
 ## Features
 
-- **Advanced Query Building:** Combines multiple criteria including keywords, domains (with subdomains automatically covered using the `site:` operator), and locations.
-- **Date Filtering:** Optionally limits search results to those published after a specified date.
-- **Avoid Keywords:** Skips results containing designated keywords (e.g., "secret clearance").
-- **Pagination:** Fetches multiple pages of results (up to a user-defined maximum).
-- **CSV Output:** Writes title and URL information into a CSV file.
-- **User Configurable:** All search settings are managed through a single `config.json` file.
+- **Advanced Query Building:** Combines multiple criteria including two sets of keywords:
+  - **intitleKeywords:** Keywords that must appear in the page title.
+  - **keywords:** General search terms that can appear anywhere in the page.
+- **Domain Filtering:** Uses the `site:` operator to restrict results to specified domains (including all subdomains).
+- **Location and Date Filtering:** Limits search results to pages matching provided location terms and (optionally) those published after a given date.
+- **Avoid Keywords:** Excludes results containing designated phrases (e.g., "government clearance").
+- **Pagination:** Fetches multiple pages of results up to a user-defined maximum.
+- **CSV Output:** Saves the title and URL of each result into a CSV file.
+- **User Configurable:** All search settings are managed through a single configuration file.
 
 ## Prerequisites
 
@@ -35,19 +38,20 @@ cd job-seeker
 
 Install the required Node.js dependencies in your project directory:
 
-```
+```bash
 npm install node-fetch@2
 ```
 
 ### 3. Create the Configuration File
 
-Create a file named `config.json` in the root of your repository. This file should contain your search criteria and API credentials.
+Create a file named `config.json` in the root of your repository. This file should contain your search criteria and API credentials. A sample configuration file is provided in the repository as `sampleConfig.json`; you can rename it to `config.json` and update the values as needed.
 
 Below is an example configuration:
 
 ```
 {
-    "keywords": ["frontend developer", "ui engineer"],
+    "intitleKeywords": ["frontend developer"],
+    "keywords": ["experienced", "senior"],
     "avoidKeywords": ["government clearance"],
     "minDate": ["2025-01-01"],
     "domains": ["workday.com", "icims.com"],
@@ -86,7 +90,7 @@ Below is an example configuration:
 ## Usage
 
 Once the configuration is complete, run the script with:
-```
+```bash
 node googleSearch.js
 ```
 
