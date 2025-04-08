@@ -1,0 +1,10 @@
+{
+    "keywords": [""],
+    "avoidKeywords": [""],
+    "minDate": ["yyyy-mm-dd"],
+    "domains": [""],
+    "locations": [""],
+    "maxResults": 100,
+    "apiKey": "YOUR_API_KEY",
+    "cx": "YOUR_CSE_ID"
+}
